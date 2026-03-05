@@ -1,128 +1,106 @@
 @echo off
+setlocal EnableDelayedExpansion
 chcp 65001 >nul 2>&1
-setlocal enabledelayedexpansion
-
-::  Cursor2API启动脚本
 
 echo.
 echo =========================================
-echo     🚀  Cursor2API启动器
+echo   Cursor2API Launcher (Go)
 echo =========================================
 echo.
+set GOPROXY=
+set HTTPS_PROXY=http://127.0.0.1:10808
+echo [INFO] GOPROXY=!GOPROXY!
+echo [INFO] GOTOOLCHAIN=!GOTOOLCHAIN!
 
-:: 检查Go是否安装
+where go >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Go is not installed. Install Go 1.24+.
+    echo [HINT] https://go.dev/dl/
+    goto :fail
+)
+
 go version >nul 2>&1
 if errorlevel 1 (
-    echo ❌ Go 未安装，请先安装 Go 1.21 或更高版本
-    echo 💡 安装方法: https://golang.org/dl/
-    pause
-    exit /b 1
+    echo [ERROR] Failed to run go.
+    echo [HINT] Check network access for toolchain download.
+    goto :fail
 )
 
-:: 显示Go版本并检查版本号
-for /f "tokens=3" %%i in ('go version') do set GO_VERSION=%%i
-set GO_VERSION=!GO_VERSION:go=!
-
-:: 检查Go版本是否满足要求 (需要 >= 1.21)
+for /f "tokens=3" %%i in ('go version') do set "GO_VERSION=%%i"
+set "GO_VERSION=!GO_VERSION:go=!"
 for /f "tokens=1,2 delims=." %%a in ("!GO_VERSION!") do (
-    set MAJOR=%%a
-    set MINOR=%%b
+    set "GO_MAJOR=%%a"
+    set "GO_MINOR=%%b"
 )
-if !MAJOR! LSS 1 (
-    echo ❌ Go 版本 !GO_VERSION! 过低，请安装 Go 1.21 或更高版本
-    pause
-    exit /b 1
+if !GO_MAJOR! LSS 1 (
+    echo [ERROR] Go !GO_VERSION! is too old. Install Go 1.24+.
+    goto :fail
 )
-if !MAJOR! EQU 1 if !MINOR! LSS 21 (
-    echo ❌ Go 版本 !GO_VERSION! 过低，请安装 Go 1.21 或更高版本
-    pause
-    exit /b 1
+if !GO_MAJOR! EQU 1 if !GO_MINOR! LSS 24 (
+    echo [ERROR] Go !GO_VERSION! is too old. This project needs Go 1.24+.
+    goto :fail
 )
+echo [OK] Go version: !GO_VERSION!
 
-echo ✅ Go 版本检查通过: !GO_VERSION!
-
-:: 检查Node.js是否安装
-node --version >nul 2>&1
+where node >nul 2>&1
 if errorlevel 1 (
-    echo ❌ Node.js 未安装，请先安装 Node.js 18 或更高版本
-    echo 💡 安装方法: https://nodejs.org/
-    pause
-    exit /b 1
+    echo [ERROR] Node.js is not installed. Install Node.js 18+.
+    echo [HINT] https://nodejs.org/
+    goto :fail
 )
 
-:: 显示Node.js版本并检查版本号
-for /f "delims=" %%i in ('node --version') do set NODE_VERSION=%%i
-set NODE_VERSION=!NODE_VERSION:v=!
-
-:: 检查Node.js版本是否满足要求 (需要 >= 18)
-for /f "tokens=1 delims=." %%a in ("!NODE_VERSION!") do set NODE_MAJOR=%%a
+for /f "delims=" %%i in ('node --version') do set "NODE_VERSION=%%i"
+set "NODE_VERSION=!NODE_VERSION:v=!"
+for /f "tokens=1 delims=." %%a in ("!NODE_VERSION!") do set "NODE_MAJOR=%%a"
 if !NODE_MAJOR! LSS 18 (
-    echo ❌ Node.js 版本 !NODE_VERSION! 过低，请安装 Node.js 18 或更高版本
-    pause
-    exit /b 1
+    echo [ERROR] Node.js !NODE_VERSION! is too old. Need Node.js 18+.
+    goto :fail
 )
+echo [OK] Node.js version: !NODE_VERSION!
 
-echo ✅ Node.js 版本检查通过: !NODE_VERSION!
-
-:: 创建.env文件（如果不存在）
-if not exist .env (
-    echo 📝 创建默认 .env 配置文件...
-    (
-        echo # 服务器配置
-        echo PORT=8002
-        echo DEBUG=false
-        echo.
-        echo # API配置
-        echo API_KEY=0000
-        echo MODELS=gpt-5.1,gpt-5,gpt-5-codex,gpt-5-mini,gpt-5-nano,gpt-4.1,gpt-4o,claude-3.5-sonnet,claude-3.5-haiku,claude-3.7-sonnet,claude-4-sonnet,claude-4.5-sonnet,claude-4-opus,claude-4.1-opus,gemini-2.5-pro,gemini-2.5-flash,gemini-3.0-pro,o3,o4-mini,deepseek-r1,deepseek-v3.1,kimi-k2-instruct,grok-3
-        echo SYSTEM_PROMPT_INJECT=
-        echo.
-        echo # 请求配置
-        echo TIMEOUT=30
-        echo USER_AGENT=Mozilla/5.0 ^(Windows NT 10.0; Win64; x64^) AppleWebKit/537.36 ^(KHTML, like Gecko^) Chrome/140.0.0.0 Safari/537.36
-        echo.
-        echo # Cursor配置
-        echo SCRIPT_URL=https://cursor.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/a-4-a/c.js?i=0^^^&v=3^^^&h=cursor.com
-    ) > .env
-    echo ✅ 默认 .env 文件已创建
+if not exist ".env" (
+    if exist ".env.example" (
+        copy /Y ".env.example" ".env" >nul
+        echo [OK] Created .env from .env.example
+    ) else (
+        > ".env" (
+            echo PORT=8002
+            echo DEBUG=false
+            echo API_KEY=0000
+        )
+        echo [OK] Created minimal .env
+    )
 ) else (
-    echo ✅ 配置文件 .env 已存在
+    echo [OK] .env already exists
 )
 
-:: 下载依赖
 echo.
-echo 📦 正在下载 Go 依赖...
+echo [INFO] Downloading Go modules...
 go mod download
 if errorlevel 1 (
-    echo ❌ 依赖下载失败！
-    pause
-    exit /b 1
+    echo [ERROR] go mod download failed.
+    goto :fail
 )
 
-:: 构建应用
-echo 🔨 正在编译 Go 应用...
+echo [INFO] Building executable...
 go build -o cursor2api-go.exe .
 if errorlevel 1 (
-    echo ❌ 编译失败！
-    pause
-    exit /b 1
+    echo [ERROR] go build failed.
+    goto :fail
 )
 
-:: 检查构建是否成功
-if not exist cursor2api-go.exe (
-    echo ❌ 编译失败 - 可执行文件未找到！
-    pause
-    exit /b 1
+if not exist "cursor2api-go.exe" (
+    echo [ERROR] Build failed: cursor2api-go.exe not found.
+    goto :fail
 )
 
-echo ✅ 应用编译成功！
-
-:: 显示服务信息
+echo [OK] Build completed. Starting service...
 echo.
-echo ✅ 准备就绪，正在启动服务...
-echo.
-
-:: 启动服务
 cursor2api-go.exe
+goto :eof
 
+:fail
+echo.
+echo [INFO] Startup failed.
 pause
+exit /b 1
